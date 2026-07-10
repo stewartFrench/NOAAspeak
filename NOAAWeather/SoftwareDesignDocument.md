@@ -1,19 +1,22 @@
-# NOAAWeather - Software Design Document v2.0
+# NOAAspeak - Software Design Document v1.0
 
 ## 1. Introduction
 
 ### 1.1 Purpose
-This document provides a comprehensive technical overview of NOAAWeather, an iOS application that provides real-time NOAA weather forecasts and alerts with continuous text-to-speech capabilities, similar to traditional NOAA Weather Radio.
+This document provides a comprehensive technical overview of NOAAspeak (formerly NOAAWeather), an iOS application that provides real-time NOAA weather forecasts and alerts with continuous text-to-speech capabilities, similar to traditional NOAA Weather Radio.
 
 ### 1.2 Scope
-NOAAWeather is a native iOS application built with SwiftUI that:
-- Automatically detects user location via GPS
+NOAAspeak is a native iOS application built with SwiftUI that:
+- Automatically detects user location via GPS with optional automatic location updates
 - Fetches real-time weather data from official NOAA APIs
-- Displays detailed 6-period forecasts and active weather alerts
-- Provides continuous text-to-speech weather broadcasting
+- Displays detailed 6-period forecasts and complete active weather alerts
+- Provides continuous text-to-speech weather broadcasting with full alert details
 - Enables location-based weather searches with autocomplete
 - Supports voice selection and preference persistence
 - Provides seamless location switching with immediate speech updates
+- Supports portrait orientation only
+- Configurable automatic location updates (1, 2, 5, 10, or 15 minute intervals)
+- Intelligent location management preventing GPS from overwriting manual location entries
 
 ### 1.3 Definitions and Acronyms
 - **NOAA**: National Oceanic and Atmospheric Administration
@@ -204,7 +207,7 @@ func fetchWeather(for location: CLLocation) async
 
 **Computed Properties**:
 - `weatherSummary: String` - Formatted text for display
-- `func speechText(locationName: String?) -> String` - Formatted text optimized for TTS with location announcement and natural pauses
+- `func speechText(locationName: String?) -> String` - Formatted text optimized for TTS with location announcement, COMPLETE alert details (event, headline, full description, and instructions), and natural pauses (UPDATED)
 
 **API Workflow**:
 ```
@@ -272,6 +275,8 @@ usesApplicationAudioSession: false  // For CarPlay compatibility
 - Reverse geocode for location names using iOS 26 MapKit APIs
 - Track location state
 - Handle both GPS and manually entered locations
+- Manage automatic location updates with configurable intervals
+- Prevent GPS from overwriting manual location entries
 
 **Key Methods**:
 ```swift
@@ -284,11 +289,27 @@ func locationManager(_:didFailWithError:)
 - `currentLocation: CLLocation?` - Current device location (GPS or manual entry)
 - `locationName: String?` - Human-readable location name (City, State format)
 - `locationStatus: String` - Location status message
+- `isManualLocation: Bool` - Flag to track if location was manually entered (NEW)
+- `autoUpdateLocation: Bool` - Enable/disable automatic location updates (NEW, default: false)
+- `locationUpdateInterval: TimeInterval` - Update interval in seconds (NEW, default: 300 = 5 minutes)
 
 **Accuracy Configuration**:
 ```swift
 desiredAccuracy = kCLLocationAccuracyKilometer
 ```
+
+**Manual Location Protection** (NEW):
+When `isManualLocation` is true:
+- GPS location updates are ignored
+- Prevents automatic location timer from overwriting user's manual location selection
+- Flag is cleared when user taps "This Location" button
+
+**Automatic Location Updates** (NEW):
+- Timer-based location refresh during continuous mode
+- Configurable intervals: 60, 120, 300, 600, or 900 seconds
+- Only active when both continuous mode AND autoUpdateLocation are enabled
+- Settings persisted to UserDefaults
+- Timer automatically stops/starts based on continuous mode state
 
 **iOS 26 Geocoding**:
 Uses modern MapKit APIs:
@@ -323,9 +344,12 @@ VStack
 └── Forecast ScrollView
     ├── Active Alerts (if any) - at top of scroll area
     │   ├── Alert header with warning icon
-    │   └── Alert cards (red background)
-    │       ├── Event name
-    │       └── Headline
+    │   └── Alert cards (red background) - COMPLETE ALERTS (NEW)
+    │       ├── Event name (bold)
+    │       ├── Headline (semibold, if available)
+    │       ├── Full description text
+    │       ├── Divider
+    │       └── Instructions (if available)
     └── Forecast Period Cards (6 periods)
         ├── Period name + Temperature
         ├── Day/Night icon + Short forecast
@@ -400,30 +424,53 @@ search.start { response, error in ... }
 
 #### 4.3.3 SettingsView
 
-**Purpose**: Configure app preferences and voice selection
+**Purpose**: Configure app preferences, automatic location updates, and voice selection
 
 **Layout**:
 ```
 NavigationView
 ├── Form
+│   ├── About Section
+│   │   ├── App version (1.0)
+│   │   └── Weather data source attribution
+│   ├── Location Updates Section
+│   │   ├── Auto-Update Location toggle
+│   │   └── Update Interval picker (1, 2, 5, 10, 15 minutes)
 │   ├── Voice Selection Section
 │   │   ├── Picker with all available English voices
-│   │   └── Test Voice button (previews selected voice)
-│   └── About Section
-│       ├── App version
-│       └── Weather data source attribution
+│   │   └── Voice quality indicator (Enhanced)
+│   └── Preview Section
+│       └── Test Voice button (previews selected voice)
 └── Toolbar
     └── Done button
 ```
 
+**Location Updates** (NEW):
+- Toggle to enable/disable automatic location updates during continuous mode
+- Configurable update interval: 1, 2, 5, 10, or 15 minutes (default: 5 minutes)
+- Settings persisted to UserDefaults
+- Only active when continuous mode is enabled
+- Respects manual location entries (won't override with GPS)
+
 **Voice Selection**:
 - Displays all available English voices from `AVSpeechSynthesisVoice.speechVoices()`
-- Shows voice name and language code
+- Shows voice name, language code, and quality (Enhanced)
 - Test button speaks sample text with selected voice
 - Selection persisted to UserDefaults via SpeechManager
 
 **Implementation**:
 ```swift
+Toggle("Auto-Update Location", isOn: $locationManager.autoUpdateLocation)
+
+Picker("Update Interval", selection: $locationManager.locationUpdateInterval)
+{
+  Text("1 minute").tag(60.0)
+  Text("2 minutes").tag(120.0)
+  Text("5 minutes").tag(300.0)
+  Text("10 minutes").tag(600.0)
+  Text("15 minutes").tag(900.0)
+}
+
 Picker("Voice", selection: $speechManager.selectedVoiceIdentifier)
 {
   ForEach(speechManager.availableVoices, id: \.identifier)
@@ -440,18 +487,24 @@ Button("Test Voice")
 
 ### 4.4 Data Flow
 
-**Location → Weather Flow**:
+**Location → Weather Flow** (UPDATED):
 ```
 1. LocationManager.requestLocation() or user enters location
 2. CLLocationManager returns location OR MKLocalSearch provides coordinates
-3. LocationManager updates currentLocation
-4. ContentView.onChange(of: currentLocation) triggers
-5. Task { await weatherService.fetchWeather(for: location) }
-6. NOAAWeatherService fetches forecast and alerts from API
-7. weatherService.weatherDataReady = true
-8. ContentView.onChange(of: weatherDataReady) triggers
-9. If continuousMode is true, calls speechManager.speak()
-10. SwiftUI re-renders with new data
+3. LocationManager checks isManualLocation flag:
+   - If true and update is from GPS: IGNORE update (don't overwrite manual location)
+   - If false or update is from manual entry: proceed
+4. LocationManager updates currentLocation
+5. ContentView.onChange(of: currentLocation) triggers with distance check:
+   - Calculate distance from current weatherService.currentLocation
+   - Only fetch if distance > 1km OR no existing forecast data
+   - Prevents redundant API calls for minor GPS coordinate changes
+6. Task { await weatherService.fetchWeather(for: location) }
+7. NOAAWeatherService fetches forecast and alerts from API
+8. weatherService.weatherDataReady = true (only if forecast data is not empty)
+9. ContentView.onChange(of: weatherDataReady) triggers
+10. If continuousMode is true, calls speechManager.speak()
+11. SwiftUI re-renders with new data
 ```
 
 **Continuous Speech Flow**:
@@ -478,14 +531,35 @@ Button("Test Voice")
 6. No automatic refresh until user interaction
 ```
 
-**This Location Flow**:
+**This Location Flow** (UPDATED):
 ```
 1. User taps This Location button
 2. speechManager.stop() (stops any ongoing speech)
 3. continuousMode = true (re-enable continuous mode)
-4. currentLocation = nil (force fresh GPS lookup)
-5. requestLocation() (get actual GPS coordinates)
-6. Rest follows Location → Weather Flow above
+4. isManualLocation = false (clear manual location flag to allow GPS updates)
+5. locationName = nil (clear old location name to prevent wrong announcement)
+6. currentLocation = nil (force fresh GPS lookup)
+7. requestLocation() (get actual GPS coordinates)
+8. Rest follows Location → Weather Flow above
+```
+
+**Automatic Location Update Flow** (NEW):
+```
+1. User enables Auto-Update Location in Settings
+2. User sets update interval (e.g., 5 minutes)
+3. When continuousMode is enabled:
+   - Timer starts with specified interval
+   - Timer fires every N minutes
+   - Calls locationManager.requestLocation()
+   - If isManualLocation = false, GPS location updates
+   - If location moved > 1km, weather fetch triggers
+   - New weather data speaks automatically
+4. When continuousMode is disabled:
+   - Timer stops automatically
+5. When manual location is entered:
+   - isManualLocation = true prevents timer's GPS updates from overwriting
+   - Timer continues running but GPS updates are ignored
+   - Ensures manual location persists during continuous mode
 ```
 
 ## 5. External Dependencies
@@ -556,10 +630,23 @@ Button("Test Voice")
 - Location only accessed when app is active
 - Clear purpose string in Info.plist
 
-**Info.plist Entry**:
+**Info.plist Entries** (UPDATED):
 ```xml
+<key>CFBundleDisplayName</key>
+<string>NOAAspeak</string>
+
 <key>NSLocationWhenInUseUsageDescription</key>
 <string>Location is used to fetch weather forecasts for your area.</string>
+
+<key>UIBackgroundModes</key>
+<array>
+  <string>audio</string>
+</array>
+
+<key>UISupportedInterfaceOrientations</key>
+<array>
+  <string>UIInterfaceOrientationPortrait</string>
+</array>
 ```
 
 **Data Handling**:
@@ -587,16 +674,20 @@ Button("Test Voice")
 
 ### 7.1 API Calls
 
-**Optimization**:
+**Optimization** (UPDATED):
 - Weather data refreshes in continuous mode (2-second delay between cycles)
 - Prevents concurrent fetches with `isLoading` flag
 - No automatic background updates (foreground only)
 - Responses used immediately, no long-term caching
+- Distance-based fetch optimization: Only fetches when location changes > 1km
+- Prevents redundant API calls from minor GPS coordinate variations
+- Optional automatic location updates with configurable intervals (1-15 minutes)
 
 **Network Performance**:
 - Typical API response: < 1 second
 - All calls use async/await (non-blocking)
 - Error handling with user feedback
+- Preserves last good forecast data on error (doesn't clear existing data)
 
 ### 7.2 Speech Synthesis
 
@@ -612,6 +703,15 @@ Button("Test Voice")
 - No large data structures
 - Forecast data: ~10-50KB per fetch
 - SwiftUI automatic memory management
+
+### 7.4 Device Orientation (NEW)
+
+**Supported Orientations**:
+- Portrait only for iPhone
+- Landscape disabled to maintain optimal layout
+- Configured in both Info.plist and project settings:
+  - `UISupportedInterfaceOrientations`: UIInterfaceOrientationPortrait
+  - `INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone`: UIInterfaceOrientationPortrait
 
 ## 8. Error Handling
 
@@ -1003,6 +1103,7 @@ Response: { "features": [...] }
 |---------|------------|-----------------|-----------------------------------|
 | 1.0     | 2026-06-16 | Claude Sonnet   | Initial comprehensive SDD for streaming version |
 | 2.0     | 2026-06-20 | Claude Sonnet   | Complete redesign for NOAA API with TTS, removed all streaming functionality |
+| 1.0     | 2026-07-10 | Claude Sonnet 4.5 | App Store release version: Renamed to NOAAspeak, added automatic location updates with configurable intervals, complete alert display and speech, portrait-only orientation, intelligent location management with manual/GPS distinction, distance-based fetch optimization (1km threshold), bug fixes for location race conditions and infinite loop prevention |
 
 ---
 

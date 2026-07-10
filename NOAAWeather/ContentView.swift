@@ -19,6 +19,7 @@ struct ContentView: View
   @State private var showLocationSearch = false
   @State private var showSettings = false
   @State private var continuousMode = true
+  @State private var locationUpdateTimer: Timer?
   
 
   var body: some View
@@ -140,6 +141,12 @@ struct ContentView: View
           // Enable continuous mode
           continuousMode = true
           
+          // Clear manual location flag to allow GPS updates
+          locationManager.isManualLocation = false
+          
+          // Clear location name so we don't announce the wrong location
+          locationManager.locationName = nil
+          
           // Clear current location to force a fresh GPS lookup
           locationManager.currentLocation = nil
           
@@ -192,20 +199,44 @@ struct ContentView: View
               
               ForEach(weatherService.activeAlerts.prefix(3))
               { alert in
-                VStack(alignment: .leading, spacing: 4)
+                VStack(alignment: .leading, spacing: 8)
                 {
                   Text(alert.properties.event)
                     .font(.subheadline)
                     .fontWeight(.bold)
                   
-                  if let headline = alert.properties.headline
+                  if let headline = alert.properties.headline, !headline.isEmpty
                   {
                     Text(headline)
+                      .font(.caption)
+                      .fontWeight(.semibold)
+                      .foregroundStyle(.primary)
+                  } // if
+                  
+                  if !alert.properties.description.isEmpty
+                  {
+                    Text(alert.properties.description)
+                      .font(.caption)
+                      .foregroundStyle(.secondary)
+                      .padding(.top, 4)
+                  } // if
+                  
+                  if let instruction = alert.properties.instruction, !instruction.isEmpty
+                  {
+                    Divider()
+                      .padding(.vertical, 4)
+                    
+                    Text("Instructions:")
+                      .font(.caption)
+                      .fontWeight(.semibold)
+                      .foregroundStyle(.primary)
+                    
+                    Text(instruction)
                       .font(.caption)
                       .foregroundStyle(.secondary)
                   } // if
                 } // VStack
-                .padding(8)
+                .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.red.opacity(0.1))
                 .cornerRadius(8)
@@ -313,7 +344,7 @@ struct ContentView: View
     } // sheet
     .sheet(isPresented: $showSettings)
     {
-      SettingsView(speechManager: speechManager)
+      SettingsView(speechManager: speechManager, locationManager: locationManager)
     } // sheet
     .onAppear
     {
@@ -337,15 +368,39 @@ struct ContentView: View
           } // Task
         } // if
       } // onSpeechFinished
+      
+      // Start location update timer if enabled
+      startLocationUpdateTimerIfNeeded()
     } // onAppear
+    .onDisappear
+    {
+      // Stop timer when view disappears
+      stopLocationUpdateTimer()
+    } // onDisappear
     .onChange(of: locationManager.currentLocation)
     {
-      if let location = locationManager.currentLocation
+      if let newLocation = locationManager.currentLocation
       {
-        Task
+        // Only fetch weather if location has changed significantly (more than 1km)
+        // or if we don't have weather data yet
+        let shouldFetch: Bool
+        if let currentWeatherLocation = weatherService.currentLocation
         {
-          await weatherService.fetchWeather(for: location)
-        } // Task
+          let distance = newLocation.distance(from: currentWeatherLocation)
+          shouldFetch = distance > 1000 || weatherService.forecastPeriods.isEmpty
+        } // if
+        else
+        {
+          shouldFetch = true
+        } // else
+        
+        if shouldFetch
+        {
+          Task
+          {
+            await weatherService.fetchWeather(for: newLocation)
+          } // Task
+        } // if
       } // if
     } // onChange
     .onChange(of: weatherService.weatherDataReady)
@@ -365,7 +420,63 @@ struct ContentView: View
         weatherService.weatherDataReady = false
       } // else if
     } // onChange
+    .onChange(of: continuousMode)
+    {
+      // Start or stop location timer based on continuous mode
+      if continuousMode
+      {
+        startLocationUpdateTimerIfNeeded()
+      } // if
+      else
+      {
+        stopLocationUpdateTimer()
+      } // else
+    } // onChange
+    .onChange(of: locationManager.autoUpdateLocation)
+    {
+      // Restart timer when auto-update setting changes
+      if continuousMode
+      {
+        startLocationUpdateTimerIfNeeded()
+      } // if
+    } // onChange
+    .onChange(of: locationManager.locationUpdateInterval)
+    {
+      // Restart timer when interval changes
+      if continuousMode && locationManager.autoUpdateLocation
+      {
+        startLocationUpdateTimerIfNeeded()
+      } // if
+    } // onChange
   } // body
+  
+  
+  //----
+          // Start location update timer if needed
+  private func startLocationUpdateTimerIfNeeded()
+  {
+    // Stop any existing timer first
+    stopLocationUpdateTimer()
+    
+    // Only start if continuous mode is on and auto-update is enabled
+    guard continuousMode && locationManager.autoUpdateLocation else { return }
+    
+    // Create new timer
+    locationUpdateTimer = Timer.scheduledTimer(withTimeInterval: locationManager.locationUpdateInterval, repeats: true)
+    { _ in
+      // Request location update
+      locationManager.requestLocation()
+    } // Timer
+  } // startLocationUpdateTimerIfNeeded
+  
+  
+  //----
+          // Stop location update timer
+  private func stopLocationUpdateTimer()
+  {
+    locationUpdateTimer?.invalidate()
+    locationUpdateTimer = nil
+  } // stopLocationUpdateTimer
 
 } // struct ContentView
 
@@ -379,11 +490,37 @@ class LocationManager: NSObject, CLLocationManagerDelegate
   var currentLocation: CLLocation?
   var locationName: String?
   var locationStatus: String = "Getting location..."
+  var isManualLocation: Bool = false  // Track if location was manually entered
+  var autoUpdateLocation: Bool = false
+  {
+    didSet
+    {
+      UserDefaults.standard.set(autoUpdateLocation, forKey: "autoUpdateLocation")
+    }
+  }
+  var locationUpdateInterval: TimeInterval = 300.0  // Default 5 minutes
+  {
+    didSet
+    {
+      UserDefaults.standard.set(locationUpdateInterval, forKey: "locationUpdateInterval")
+    }
+  }
   
   
   override init()
   {
     super.init()
+    
+    // Load saved preferences from UserDefaults
+    if let savedAutoUpdate = UserDefaults.standard.object(forKey: "autoUpdateLocation") as? Bool
+    {
+      autoUpdateLocation = savedAutoUpdate
+    }
+    if let savedInterval = UserDefaults.standard.object(forKey: "locationUpdateInterval") as? TimeInterval
+    {
+      locationUpdateInterval = savedInterval
+    }
+    
     manager.delegate = self
     manager.desiredAccuracy = kCLLocationAccuracyKilometer
   } // init
@@ -400,6 +537,13 @@ class LocationManager: NSObject, CLLocationManagerDelegate
                       didUpdateLocations locations: [CLLocation])
   {
     guard let location = locations.first else { return }
+    
+    // Don't overwrite manual location with GPS location
+    if isManualLocation
+    {
+      return
+    }
+    
     currentLocation = location
     locationStatus = "Location found"
     

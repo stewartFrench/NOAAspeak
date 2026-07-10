@@ -154,14 +154,21 @@ struct LocationSearchView: View
       // Stop any ongoing speech
       speechManager.stop()
       
-      // Re-enable continuous mode for new location
-      continuousMode = true
+      // Disable continuous mode temporarily to stop the location timer
+      continuousMode = false
+      
+      // Mark this as a manual location entry
+      locationManager.isManualLocation = true
       
       // Update location name
       locationManager.locationName = mapItem.name ?? "Selected Location"
       
       // Update location (this will trigger onChange in ContentView to fetch weather)
       locationManager.currentLocation = location
+      
+      // Re-enable continuous mode after location is set
+      // This ensures the timer restarts fresh with the new location
+      continuousMode = true
       
       dismiss()
     } // start

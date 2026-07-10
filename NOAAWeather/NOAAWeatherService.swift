@@ -151,13 +151,18 @@ class NOAAWeatherService
       } // else
       
       isLoading = false
-      weatherDataReady = true
+      // Only set weatherDataReady if we actually have forecast data
+      if !forecastPeriods.isEmpty
+      {
+        weatherDataReady = true
+      } // if
     } // do
     catch
     {
       errorMessage = "Failed to fetch weather data: \(error.localizedDescription)"
       statusMessage = "Error loading weather data"
       isLoading = false
+      // Don't clear existing forecast data on error - keep showing last good data
       print("❌ Weather fetch error: \(error)")
     } // catch
   } // fetchWeather
@@ -241,23 +246,17 @@ class NOAAWeatherService
           speech += "\(headline). "
         } // if
         
-        // Add description if not too long
+        // Add full description
         let description = alert.properties.description
         if !description.isEmpty
         {
-          // Limit description to first 200 characters for speech
-          let truncatedDesc = description.count > 200 ? 
-            String(description.prefix(200)) + "..." : description
-          speech += "\(truncatedDesc) "
+          speech += "\(description) "
         } // if
         
-        // Add instructions if available
+        // Add full instructions if available
         if let instruction = alert.properties.instruction, !instruction.isEmpty
         {
-          // Limit instructions to first 150 characters
-          let truncatedInstr = instruction.count > 150 ?
-            String(instruction.prefix(150)) + "..." : instruction
-          speech += "\(truncatedInstr) "
+          speech += "\(instruction) "
         } // if
       } // for
       

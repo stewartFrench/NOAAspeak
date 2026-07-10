@@ -14,6 +14,7 @@ struct SettingsView: View
 {
   @Environment(\.dismiss) var dismiss
   @Bindable var speechManager: SpeechManager
+  @Bindable var locationManager: LocationManager
   
   
   var body: some View
@@ -22,6 +23,57 @@ struct SettingsView: View
     {
       Form
       {
+        Section(header: Text("About"))
+        {
+          HStack
+          {
+            Text("Version")
+            Spacer()
+            Text(appVersionWithBuild)
+              .foregroundStyle(.secondary)
+          } // HStack
+          
+          HStack
+          {
+            Text("Data Source")
+            Spacer()
+            Text("NOAA API")
+              .foregroundStyle(.secondary)
+          } // HStack
+        } // Section
+        
+        Section(header: Text("Location Updates"))
+        {
+          Text("Automatically update location while in continuous mode")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          
+          Toggle("Auto-Update Location", isOn: $locationManager.autoUpdateLocation)
+          
+          if locationManager.autoUpdateLocation
+          {
+            VStack(alignment: .leading, spacing: 8)
+            {
+              Text("Update Interval")
+                .font(.subheadline)
+              
+              Picker("Update Interval", selection: $locationManager.locationUpdateInterval)
+              {
+                Text("1 minute").tag(60.0)
+                Text("2 minutes").tag(120.0)
+                Text("5 minutes").tag(300.0)
+                Text("10 minutes").tag(600.0)
+                Text("15 minutes").tag(900.0)
+              } // Picker
+              .pickerStyle(.segmented)
+              
+              Text("Location will update every \(locationManager.locationUpdateInterval < 60 ? "\(Int(locationManager.locationUpdateInterval)) seconds" : "\(Int(locationManager.locationUpdateInterval / 60)) minute\(locationManager.locationUpdateInterval == 60 ? "" : "s")")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } // VStack
+          } // if
+        } // Section
+        
         Section(header: Text("Voice Selection"))
         {
           Text("Choose the voice for weather announcements")
@@ -54,25 +106,6 @@ struct SettingsView: View
             } // HStack
           } // Button
         } // Section
-        
-        Section(header: Text("About"))
-        {
-          HStack
-          {
-            Text("Version")
-            Spacer()
-            Text("2.0")
-              .foregroundStyle(.secondary)
-          } // HStack
-          
-          HStack
-          {
-            Text("Data Source")
-            Spacer()
-            Text("NOAA API")
-              .foregroundStyle(.secondary)
-          } // HStack
-        } // Section
       } // Form
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
@@ -88,6 +121,16 @@ struct SettingsView: View
       } // toolbar
     } // NavigationView
   } // body
+  
+  
+  //----
+          // Get app version with build number
+  var appVersionWithBuild: String
+  {
+    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    return "\(version) (\(build))"
+  } // appVersionWithBuild
   
   
   //----
