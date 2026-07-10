@@ -17,3 +17,16 @@ Key Features:
 
 Perfect for weather enthusiasts, outdoor workers, emergency preparedness, or anyone who wants hands-free weather updates while working, driving, or relaxing.
 
+-------------
+Privacy Policy for NOAAspeak
+
+NOAAspeak does not collect, store, or share any personal information or user data. 
+
+Contact: stewart.french@gmail.com Last Updated: 07/10/2026
+
+Support Information
+
+For any support issues please contact Stewart French at stewart.french@gmail.com
+
+---------------
+end
