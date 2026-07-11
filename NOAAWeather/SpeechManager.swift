@@ -80,28 +80,41 @@ class SpeechManager: NSObject, AVSpeechSynthesizerDelegate
           // Speak the provided text
   func speak(_ text: String)
   {
-    guard let synthesizer = synthesizer else { return }
-    
-    // Stop any current speech
-    if synthesizer.isSpeaking
+    // Stop and recreate synthesizer for clean slate
+    if let synth = synthesizer
     {
       wasManuallyStopped = true
-      synthesizer.stopSpeaking(at: .immediate)
-    } // if
+      synth.stopSpeaking(at: .immediate)
+      synth.delegate = nil
+    }
     
-    // Create utterance
-    let utterance = AVSpeechUtterance(string: text)
-    utterance.voice = AVSpeechSynthesisVoice(identifier: selectedVoiceIdentifier) ?? 
-                      AVSpeechSynthesisVoice(language: "en-US")
-    utterance.rate = 0.5  // Slightly slower for clarity
-    utterance.pitchMultiplier = 1.0
-    utterance.volume = 1.0
+    // Reset state
+    isSpeaking = false
     
-    // Start speaking
-    wasManuallyStopped = false
-    isSpeaking = true
-    statusText = "Speaking forecast..."
-    synthesizer.speak(utterance)
+    // Recreate synthesizer to ensure fresh start
+    synthesizer = AVSpeechSynthesizer()
+    synthesizer?.usesApplicationAudioSession = true
+    synthesizer?.delegate = self
+    
+    guard let newSynthesizer = synthesizer else { return }
+    
+    // Use DispatchQueue to ensure clean start
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05)
+    {
+      // Create fresh utterance
+      let utterance = AVSpeechUtterance(string: text)
+      utterance.voice = AVSpeechSynthesisVoice(identifier: self.selectedVoiceIdentifier) ?? 
+                        AVSpeechSynthesisVoice(language: "en-US")
+      utterance.rate = 0.5  // Slightly slower for clarity
+      utterance.pitchMultiplier = 1.0
+      utterance.volume = 1.0
+      
+      // Start speaking
+      self.wasManuallyStopped = false
+      self.isSpeaking = true
+      self.statusText = "Speaking forecast..."
+      newSynthesizer.speak(utterance)
+    }
   } // speak
   
   

@@ -11,12 +11,15 @@ NOAAspeak is a native iOS application built with SwiftUI that:
 - Fetches real-time weather data from official NOAA APIs
 - Displays detailed 6-period forecasts and complete active weather alerts
 - Provides continuous text-to-speech weather broadcasting with full alert details
-- Enables location-based weather searches with autocomplete
+- Enables location-based weather searches with autocomplete and auto-focus keyboard
 - Supports voice selection and preference persistence
 - Provides seamless location switching with immediate speech updates
 - Supports portrait orientation only
 - Configurable automatic location updates (1, 2, 5, 10, or 15 minute intervals)
 - Intelligent location management preventing GPS from overwriting manual location entries
+- Ensures proper speech restart from beginning (no resume from middle)
+- Waits for reverse geocoding before announcing location name
+- Stable UI with no button movement during location updates
 
 ### 1.3 Definitions and Acronyms
 - **NOAA**: National Oceanic and Atmospheric Administration
@@ -267,6 +270,13 @@ usesApplicationAudioSession: false  // For CarPlay compatibility
 - `wasManuallyStopped` flag prevents loop when user stops speech
 - Automatic restart when speech finishes naturally
 
+**Speech Restart Logic** (UPDATED):
+- Synthesizer is completely recreated on each `speak()` call
+- Prevents speech from resuming from middle due to cached state
+- Uses `DispatchQueue.main.asyncAfter` with 50ms delay for clean stop/start separation
+- Old synthesizer delegate is cleared before creating new instance
+- Ensures speech always starts from beginning, never resumes
+
 #### 4.2.3 LocationManager
 
 **Responsibilities**:
@@ -364,13 +374,20 @@ VStack
 - Listen/Stop: Green when forecast available, gray when disabled, label changes based on continuousMode
 - This Location: Blue, disabled during loading, requests fresh GPS location
 
+**UI Stability** (NEW):
+- Header maintains fixed height using placeholder text when location is nil
+- Status message has `minHeight: 20` to prevent layout shifts
+- Speech status has fixed `height: 20` 
+- Buttons remain stationary during location updates and weather fetches
+- No Spacer below ScrollView to prevent flexible layout changes
+
 **State Transitions**:
 1. **Initial Launch**: Automatically requests location and starts speaking in continuous mode
-2. **Loading**: Progress indicator in forecast area
+2. **Loading**: Progress indicator in forecast area, buttons remain stable
 3. **Ready**: Forecast cards displayed, continuous speech active
 4. **Error**: Error icon + error message in forecast area
 5. **Stopped**: User tapped Stop, continuousMode = false, shows Listen button
-6. **Location Change**: Stops speech, fetches new weather, resumes continuous mode
+6. **Location Change**: Stops speech, fetches new weather, resumes continuous mode, UI stays stable
 
 **Continuous Mode Behavior**:
 - Enabled by default on launch and when entering new location
@@ -382,19 +399,25 @@ VStack
 
 #### 4.3.2 LocationSearchView
 
-**Purpose**: Enable users to search for weather at any US location with autocomplete
+**Purpose**: Enable users to search for weather at any US location with autocomplete and auto-focus
 
 **Layout**:
 ```
 NavigationView
 ├── Instructions text
-├── Search TextField
+├── Search TextField (auto-focused)
 ├── Autocomplete Results List (MKLocalSearchCompleter)
 │   └── Completion items with title and subtitle
 ├── Progress indicator (when searching)
 └── Toolbar
     └── Cancel button
 ```
+
+**Auto-Focus Keyboard** (NEW):
+- Uses `@FocusState` to manage text field focus
+- Automatically focuses search field on view appearance
+- Keyboard appears immediately when user taps "Enter Location"
+- Improves user experience by eliminating extra tap
 
 **Search Implementation**:
 Uses `MKLocalSearchCompleter` for autocomplete:
@@ -533,14 +556,20 @@ Button("Test Voice")
 
 **This Location Flow** (UPDATED):
 ```
-1. User taps This Location button
+1. User taps This Location button (guarded by !isLoading check)
 2. speechManager.stop() (stops any ongoing speech)
 3. continuousMode = true (re-enable continuous mode)
 4. isManualLocation = false (clear manual location flag to allow GPS updates)
-5. locationName = nil (clear old location name to prevent wrong announcement)
-6. currentLocation = nil (force fresh GPS lookup)
-7. requestLocation() (get actual GPS coordinates)
-8. Rest follows Location → Weather Flow above
+5. locationName = nil (clear old location name)
+6. waitingForGPSLocation = true (set flag to wait for reverse geocoding)
+7. weatherService.currentLocation = nil (force fresh fetch)
+8. locationManager.currentLocation = nil (force fresh GPS lookup)
+9. requestLocation() (get actual GPS coordinates)
+10. Weather fetch completes → weatherDataReady = true
+11. If waitingForGPSLocation && locationName == nil: skip speech, wait for geocoding
+12. Reverse geocoding completes → locationName updated
+13. onChange(locationName) detects update and triggers speech with correct location
+14. Speech starts with proper "Here is the weather for [City, State]" announcement
 ```
 
 **Automatic Location Update Flow** (NEW):
@@ -1104,6 +1133,7 @@ Response: { "features": [...] }
 | 1.0     | 2026-06-16 | Claude Sonnet   | Initial comprehensive SDD for streaming version |
 | 2.0     | 2026-06-20 | Claude Sonnet   | Complete redesign for NOAA API with TTS, removed all streaming functionality |
 | 1.0     | 2026-07-10 | Claude Sonnet 4.5 | App Store release version: Renamed to NOAAspeak, added automatic location updates with configurable intervals, complete alert display and speech, portrait-only orientation, intelligent location management with manual/GPS distinction, distance-based fetch optimization (1km threshold), bug fixes for location race conditions and infinite loop prevention |
+| 1.0.1   | 2026-07-11 | Claude Sonnet 4.5 | Bug fixes: Fixed speech resume-from-middle issue by recreating synthesizer on each speak() call, added waitingForGPSLocation flag to ensure correct location name announcement, improved UI stability with fixed-height header and status areas, added auto-focus keyboard for location search, prevented button movement during updates, added guard against multiple rapid "This Location" presses |
 
 ---
 

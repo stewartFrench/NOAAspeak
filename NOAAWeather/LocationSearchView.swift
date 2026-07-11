@@ -22,6 +22,7 @@ struct LocationSearchView: View
   @State private var searchResults: [MKLocalSearchCompletion] = []
   @State private var isSearching = false
   @State private var completerDelegate = LocationCompleterDelegate()
+  @FocusState private var isTextFieldFocused: Bool
   
   
   var body: some View
@@ -44,6 +45,7 @@ struct LocationSearchView: View
                      text: $searchText)
               .textFieldStyle(.roundedBorder)
               .autocapitalization(.words)
+              .focused($isTextFieldFocused)
               .onChange(of: searchText)
               {
                 completerDelegate.searchCompleter.queryFragment = searchText
@@ -116,6 +118,9 @@ struct LocationSearchView: View
         { results in
           searchResults = results
         } // onResultsUpdate
+        
+        // Auto-focus the text field to show keyboard
+        isTextFieldFocused = true
       } // onAppear
     } // NavigationView
   } // body

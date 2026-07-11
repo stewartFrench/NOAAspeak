@@ -20,6 +20,7 @@ struct ContentView: View
   @State private var showSettings = false
   @State private var continuousMode = true
   @State private var locationUpdateTimer: Timer?
+  @State private var waitingForGPSLocation = false
   
 
   var body: some View
@@ -53,27 +54,39 @@ struct ContentView: View
           .font(.largeTitle)
           .fontWeight(.bold)
         
-        if let location = weatherService.currentLocation
+        Group
         {
-          Text(locationManager.locationName ?? "Your Location")
-            .font(.headline)
-            .foregroundStyle(.secondary)
-          
-          Text(String(format: "%.4f°, %.4f°",
-                     location.coordinate.latitude,
-                     location.coordinate.longitude))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        } // if
+          if let location = weatherService.currentLocation
+          {
+            Text(locationManager.locationName ?? "Your Location")
+              .font(.headline)
+              .foregroundStyle(.secondary)
+            
+            Text(String(format: "%.4f°, %.4f°",
+                       location.coordinate.latitude,
+                       location.coordinate.longitude))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          else
+          {
+            Text(" ")
+              .font(.headline)
+            Text(" ")
+              .font(.caption)
+          }
+        }
       } // VStack
       .padding(.top)
       
-              // Status message
+              // Status message (fixed height to prevent layout shift)
       Text(weatherService.statusMessage)
         .font(.subheadline)
         .foregroundStyle(weatherService.errorMessage != nil ? .red : .secondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal)
+        .frame(minHeight: 20)
+        .fixedSize(horizontal: false, vertical: true)
       
               // Action Buttons
       HStack(spacing: 12)
@@ -135,6 +148,9 @@ struct ContentView: View
                 // This Location button
         Button(action:
         {
+          // Prevent multiple rapid presses while loading
+          guard !weatherService.isLoading else { return }
+          
           // Stop any ongoing speech
           speechManager.stop()
           
@@ -144,8 +160,12 @@ struct ContentView: View
           // Clear manual location flag to allow GPS updates
           locationManager.isManualLocation = false
           
-          // Clear location name so we don't announce the wrong location
+          // Clear old location name and set flag to wait for reverse geocoding
           locationManager.locationName = nil
+          waitingForGPSLocation = true
+          
+          // Clear weather service location to force fresh fetch even if same GPS location
+          weatherService.currentLocation = nil
           
           // Clear current location to force a fresh GPS lookup
           locationManager.currentLocation = nil
@@ -331,9 +351,7 @@ struct ContentView: View
         } // VStack
         .padding()
       } // ScrollView
-      .frame(minHeight: 300)
       
-      Spacer()
     } // VStack
     .sheet(isPresented: $showLocationSearch)
     {
@@ -410,8 +428,23 @@ struct ContentView: View
          !weatherService.forecastPeriods.isEmpty &&
          continuousMode
       {
+        // If waiting for GPS location, don't speak until we have a location name
+        if waitingForGPSLocation && locationManager.locationName == nil
+        {
+          // Don't speak yet - wait for reverse geocoding
+          weatherService.weatherDataReady = false
+          return
+        }
+        
+        // Clear the waiting flag
+        waitingForGPSLocation = false
+        
+        // Generate fresh speech text
         let speech = weatherService.speechText(locationName: locationManager.locationName)
+        
+        // Speak immediately - the speak() method handles stopping existing speech
         speechManager.speak(speech)
+        
         weatherService.weatherDataReady = false  // Reset for next fetch
       } // if
       else if weatherService.weatherDataReady
@@ -447,6 +480,19 @@ struct ContentView: View
       {
         startLocationUpdateTimerIfNeeded()
       } // if
+    } // onChange
+    .onChange(of: locationManager.locationName)
+    {
+      // If we were waiting for GPS location name and now we have it, trigger speech
+      if waitingForGPSLocation && 
+         locationManager.locationName != nil &&
+         !weatherService.forecastPeriods.isEmpty &&
+         continuousMode
+      {
+        waitingForGPSLocation = false
+        let speech = weatherService.speechText(locationName: locationManager.locationName)
+        speechManager.speak(speech)
+      }
     } // onChange
   } // body
   
