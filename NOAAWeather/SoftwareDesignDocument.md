@@ -1,4 +1,4 @@
-# NOAAspeak - Software Design Document v1.0
+# NOAAspeak - Software Design Document v1.0.2
 
 ## 1. Introduction
 
@@ -336,8 +336,9 @@ VStack
 ├── Header
 │   ├── Settings button (gear icon, top-right)
 │   ├── Cloud/Sun icon
-│   ├── "NOAA Weather" title
-│   ├── Location name (if available)
+│   ├── Location name (large, prominent - if available)
+│   ├── "NOAA Weather" subtitle
+│   ├── Coordinates
 │   └── Status message
 ├── Action Buttons (HStack - equal width)
 │   ├── Enter Location (Blue)
@@ -376,6 +377,7 @@ VStack
 
 **UI Stability** (NEW):
 - Header maintains fixed height using placeholder text when location is nil
+- Location name is displayed prominently (largeTitle, bold) with "NOAA Weather" as secondary text (headline)
 - Status message has `minHeight: 20` to prevent layout shifts
 - Speech status has fixed `height: 20` 
 - Buttons remain stationary during location updates and weather fetches
@@ -1134,6 +1136,7 @@ Response: { "features": [...] }
 | 2.0     | 2026-06-20 | Claude Sonnet   | Complete redesign for NOAA API with TTS, removed all streaming functionality |
 | 1.0     | 2026-07-10 | Claude Sonnet 4.5 | App Store release version: Renamed to NOAAspeak, added automatic location updates with configurable intervals, complete alert display and speech, portrait-only orientation, intelligent location management with manual/GPS distinction, distance-based fetch optimization (1km threshold), bug fixes for location race conditions and infinite loop prevention |
 | 1.0.1   | 2026-07-11 | Claude Sonnet 4.5 | Bug fixes: Fixed speech resume-from-middle issue by recreating synthesizer on each speak() call, added waitingForGPSLocation flag to ensure correct location name announcement, improved UI stability with fixed-height header and status areas, added auto-focus keyboard for location search, prevented button movement during updates, added guard against multiple rapid "This Location" presses |
+| 1.0.2   | 2026-07-11 | Claude Sonnet 4.5 | UI improvement: Swapped text sizes in header - location name now displayed prominently (largeTitle, bold) with "NOAA Weather" as secondary text (headline) for better at-a-glance location visibility |
 
 ---
 

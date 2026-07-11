@@ -50,15 +50,15 @@ struct ContentView: View
           .font(.system(size: 60))
           .foregroundStyle(.blue)
         
-        Text("NOAA Weather")
-          .font(.largeTitle)
-          .fontWeight(.bold)
-        
         Group
         {
           if let location = weatherService.currentLocation
           {
             Text(locationManager.locationName ?? "Your Location")
+              .font(.largeTitle)
+              .fontWeight(.bold)
+            
+            Text("NOAA Weather")
               .font(.headline)
               .foregroundStyle(.secondary)
             
@@ -70,6 +70,9 @@ struct ContentView: View
           }
           else
           {
+            Text(" ")
+              .font(.largeTitle)
+              .fontWeight(.bold)
             Text(" ")
               .font(.headline)
             Text(" ")
