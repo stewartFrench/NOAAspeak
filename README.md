@@ -29,4 +29,7 @@ Support Information
 For any support issues please contact Stewart French at stewart.french@gmail.com
 
 ---------------
+This app uses the official National Weather Service (NWS) API (api.weather.gov), which is publicly accessible government data provided by NOAA. According to NOAA's open data policy (https://www.noaa.gov/information-technology/open-data-dissemination), all NOAA data is in the public domain and freely available for any use. The API documentation is available at https://www.weather.gov/documentation/services-web-api and explicitly states the API is free to use for any purpose with no authentication required.
+
+---------------
 end
