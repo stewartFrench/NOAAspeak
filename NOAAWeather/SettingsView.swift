@@ -74,6 +74,15 @@ struct SettingsView: View
           } // if
         } // Section
         
+        Section(header: Text("Weather Alerts"))
+        {
+          Text("Alerts are always shown on the main screen. Turn this off to speak only the forecast.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          
+          Toggle("Speak Alerts", isOn: $speechManager.speakAlerts)
+        } // Section
+        
         Section(header: Text("Voice Selection"))
         {
           Text("Choose the voice for weather announcements")

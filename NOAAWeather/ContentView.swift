@@ -128,7 +128,8 @@ struct ContentView: View
           {
             // Start continuous mode
             continuousMode = true
-            let speech = weatherService.speechText(locationName: locationManager.locationName)
+            let speech = weatherService.speechText(locationName: locationManager.locationName,
+                                                   includeAlerts: speechManager.speakAlerts)
             speechManager.speak(speech)
           } // else
         }) // action
@@ -443,7 +444,8 @@ struct ContentView: View
         waitingForGPSLocation = false
         
         // Generate fresh speech text
-        let speech = weatherService.speechText(locationName: locationManager.locationName)
+        let speech = weatherService.speechText(locationName: locationManager.locationName,
+                                                   includeAlerts: speechManager.speakAlerts)
         
         // Speak immediately - the speak() method handles stopping existing speech
         speechManager.speak(speech)
@@ -493,7 +495,8 @@ struct ContentView: View
          continuousMode
       {
         waitingForGPSLocation = false
-        let speech = weatherService.speechText(locationName: locationManager.locationName)
+        let speech = weatherService.speechText(locationName: locationManager.locationName,
+                                                   includeAlerts: speechManager.speakAlerts)
         speechManager.speak(speech)
       }
     } // onChange
@@ -547,7 +550,8 @@ class LocationManager: NSObject, CLLocationManagerDelegate
       UserDefaults.standard.set(autoUpdateLocation, forKey: "autoUpdateLocation")
     }
   }
-  var locationUpdateInterval: TimeInterval = 300.0  // Default 5 minutes
+          // Default 5 minutes
+  var locationUpdateInterval: TimeInterval = 300.0
   {
     didSet
     {

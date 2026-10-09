@@ -217,8 +217,9 @@ class NOAAWeatherService
   
   
   //----
-          // Get text suitable for speech synthesis
-  func speechText(locationName: String?) -> String
+          // Get text suitable for speech synthesis.
+          // Pass includeAlerts: false to speak only the forecast.
+  func speechText(locationName: String?, includeAlerts: Bool = true) -> String
   {
     guard !forecastPeriods.isEmpty else
     {
@@ -233,8 +234,8 @@ class NOAAWeatherService
       speech += "Here is the weather for \(location)... "
     } // if
     
-    // Announce alerts first with full details
-    if !activeAlerts.isEmpty
+    // Announce alerts first with full details (unless disabled in settings)
+    if includeAlerts && !activeAlerts.isEmpty
     {
       speech += "Attention. There are \(activeAlerts.count) active weather alerts. "
       for alert in activeAlerts.prefix(2)

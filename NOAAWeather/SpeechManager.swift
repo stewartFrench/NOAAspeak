@@ -25,6 +25,16 @@ class SpeechManager: NSObject, AVSpeechSynthesizerDelegate
       UserDefaults.standard.set(selectedVoiceIdentifier, forKey: "selectedVoiceIdentifier")
     }
   }
+          // Whether active weather alerts are included in spoken forecasts.
+          // Alerts are always displayed on screen regardless of this setting.
+  var speakAlerts: Bool = false
+  {
+    didSet
+    {
+      // Save to UserDefaults when changed
+      UserDefaults.standard.set(speakAlerts, forKey: "speakAlerts")
+    }
+  }
   private var wasManuallyStopped: Bool = false
   
   
@@ -48,6 +58,12 @@ class SpeechManager: NSObject, AVSpeechSynthesizerDelegate
     if let savedVoice = UserDefaults.standard.string(forKey: "selectedVoiceIdentifier")
     {
       selectedVoiceIdentifier = savedVoice
+    }
+    
+    // Load saved speak-alerts preference (defaults to false if never set)
+    if UserDefaults.standard.object(forKey: "speakAlerts") != nil
+    {
+      speakAlerts = UserDefaults.standard.bool(forKey: "speakAlerts")
     }
     
     synthesizer = AVSpeechSynthesizer()
